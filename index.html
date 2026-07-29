@@ -17,10 +17,47 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+#metanova-home-logo {
+	position: fixed;
+	left: 50%;
+	top: 17%;
+	transform: translateX(-50%);
+	width: min(38vw, 410px);
+	height: auto;
+	display: none;
+	visibility: hidden;
+	opacity: 0;
+	z-index: 2147483647;
+	pointer-events: none;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: none;
+}
+
+#metanova-home-logo.metanova-visible {
+	display: block !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+}
+
 body.metanova-gameplay-active #metanova-home-logo {
 	display: none !important;
 	visibility: hidden !important;
 	opacity: 0 !important;
+}
+
+#metanova-debug-panel {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2147483647;
+	padding: 8px 10px;
+	background: rgba(0, 0, 0, 0.82);
+	color: #f2f2f2;
+	font: 12px/1.35 monospace;
+	white-space: pre-wrap;
+	pointer-events: none;
 }
 </style>
 
@@ -41,368 +78,186 @@ if (location.protocol.substr(0, 4) === "file")
 			<p class="notSupportedMessage">JavaScript appears to be disabled. Please enable it to view this content.</p>
 		</div>
 	</noscript>
+	<img
+	  id="metanova-home-logo"
+	  src="./images/metanova_logo.webp"
+	  alt="MetaNova"
+	  draggable="false"
+	>
 	<script src="scripts/supportcheck.js"></script>
 	<script src="scripts/offlineclient.js" type="module"></script>
 	<script src="scripts/main.js" type="module"></script>
 	<script src="scripts/register-sw.js" type="module"></script>
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
-		const logoUrl = new URL("./images/metanova_logo.webp", document.baseURI).href;
-		const DESIGN_WIDTH = 1080;
-		const DESIGN_HEIGHT = 1920;
-		const START_CENTER_X = 540;
-		const START_CENTER_Y = 1046;
-		const START_WIDTH = 710;
-		const START_HEIGHT = 200;
-		const OPTION_HOME_CENTER_X = 540;
-		const OPTION_HOME_CENTER_Y = 1038;
-		const OPTION_HOME_WIDTH = 460;
-		const OPTION_HOME_HEIGHT = 162;
-		const GAMEOVER_HOME_CENTER_X = 415;
-		const GAMEOVER_HOME_CENTER_Y = 1275;
-		const GAMEOVER_HOME_WIDTH = 210;
-		const GAMEOVER_HOME_HEIGHT = 215;
-		const HOME_UNLOCK_TICKS = 8;
-		const LOGO_TOP_DESIGN_Y = 1365;
-		const LOGO_WIDTH_DESIGN = 270;
+		const START_RECT = { cx: 0.5, cy: 1046 / 1920, w: 710 / 1080, h: 200 / 1920 };
+		const OPTION_HOME_RECT = { cx: 0.5, cy: 1038 / 1920, w: 460 / 1080, h: 162 / 1920 };
+		const GAMEOVER_HOME_RECT = { cx: 415 / 1080, cy: 1275 / 1920, w: 210 / 1080, h: 215 / 1920 };
 
-		let isShown = false;
-		let gameplayActive = false;
-		let homeReturnPending = false;
-		let homeConfirmTicks = 0;
-		let logoLoadStatus = "pending";
+		let metanovaGameStarted = false;
+		let metanovaLastActivationMs = 0;
 
-		function getCanvas() {
-			return window.c3canvas || document.querySelector("canvas");
+		function getMetaNovaLogo() {
+			return document.getElementById("metanova-home-logo");
 		}
 
-		window.__metanovaDebug = {
-			getState: function () {
-				const img = document.getElementById("metanova-home-logo");
-				const style = img ? getComputedStyle(img) : null;
-				return {
-					isShown: isShown,
-					gameplayActive: gameplayActive,
-					homeReturnPending: homeReturnPending,
-					homeConfirmTicks: homeConfirmTicks,
-					logoLoadStatus: logoLoadStatus,
-					hasLogoElement: !!img,
-					display: style ? style.display : null,
-					visibility: style ? style.visibility : null,
-					opacity: style ? style.opacity : null,
-					zIndex: style ? style.zIndex : null
-				};
-			}
-		};
+		function showMetaNovaLogo() {
+			const logo = getMetaNovaLogo();
 
-		function getOrCreateLogo() {
-			let img = document.getElementById("metanova-home-logo");
-			if (img) {
-				console.log("[MetaNova] getOrCreateLogo(): existing element found");
-				return img;
+			if (!logo || metanovaGameStarted) {
+				return;
 			}
 
-			img = document.createElement("img");
-			img.id = "metanova-home-logo";
-			img.alt = "MetaNova";
-			img.src = logoUrl;
-			img.style.position = "fixed";
-			img.style.left = "50%";
-			img.style.transform = "translateX(-50%)";
-			img.style.zIndex = "2147483647";
-			img.style.pointerEvents = "none";
-			img.style.display = "none";
-			img.style.visibility = "visible";
-			img.style.opacity = "1";
-			img.style.height = "auto";
-			img.style.maxWidth = "none";
-			const logo = img;
-			logo.addEventListener("load", () => {
-				logoLoadStatus = "loaded";
-				console.log("[MetaNova] logo loaded:", logo.src);
+			document.body.classList.remove("metanova-gameplay-active");
+			logo.classList.add("metanova-visible");
+
+			console.log("[MetaNova] shown", {
+				src: logo.currentSrc || logo.src,
+				display: getComputedStyle(logo).display,
+				visibility: getComputedStyle(logo).visibility,
+				opacity: getComputedStyle(logo).opacity
 			});
-			logo.addEventListener("error", () => {
-				logoLoadStatus = "error";
-				console.error("[MetaNova] logo failed:", logo.src);
-			});
-			console.log("[MetaNova] creating logo element with src", img.src);
-			document.body.appendChild(img);
-			return img;
 		}
 
-		const probeCanvas = document.createElement("canvas");
-		const probeCtx = probeCanvas.getContext("2d", { willReadFrequently: true });
+		function hideMetaNovaLogo() {
+			const logo = getMetaNovaLogo();
 
-		function isWarmStartPixel(p) {
-			return p[3] > 200 && p[0] > 150 && p[1] > 80 && p[0] > p[2] + 25;
-		}
-
-		function isSceneReadyForLogo() {
-			const canvas = getCanvas();
-			if (!canvas || !canvas.width || !canvas.height || !probeCtx) {
-				console.log("[MetaNova] isSceneReadyForLogo=false (canvas/probe unavailable)");
-				return false;
+			if (!logo) {
+				return;
 			}
 
-			probeCanvas.width = canvas.width;
-			probeCanvas.height = canvas.height;
+			logo.classList.remove("metanova-visible");
+			document.body.classList.add("metanova-gameplay-active");
 
-			try {
-				probeCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-				const samplePoints = [
-					[0.25, 0.25],
-					[0.75, 0.25],
-					[0.5, 0.5],
-					[0.25, 0.75],
-					[0.75, 0.75]
-				];
-
-				let brightCount = 0;
-				for (const [nx, ny] of samplePoints) {
-					const x = Math.max(0, Math.min(canvas.width - 1, Math.floor(canvas.width * nx)));
-					const y = Math.max(0, Math.min(canvas.height - 1, Math.floor(canvas.height * ny)));
-					const p = probeCtx.getImageData(x, y, 1, 1).data;
-					const brightness = (p[0] + p[1] + p[2]) / 3;
-					if (p[3] > 200 && brightness > 18) {
-						brightCount += 1;
-					}
-				}
-
-				// Black loading screen stays hidden; real scene should have multiple bright points.
-				const ready = brightCount >= 3;
-				console.log("[MetaNova] isSceneReadyForLogo=", ready, "brightCount=", brightCount);
-				return ready;
-			} catch (err) {
-				console.log("[MetaNova] isSceneReadyForLogo=false (exception)", err);
-				return false;
-			}
-		}
-
-		function isHomeVisualActive() {
-			const canvas = getCanvas();
-			if (!canvas || !canvas.width || !canvas.height || !probeCtx) {
-				console.log("[MetaNova] isHomeVisualActive=false (canvas/probe unavailable)");
-				return false;
-			}
-
-			probeCanvas.width = canvas.width;
-			probeCanvas.height = canvas.height;
-
-			try {
-				probeCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-				const baseX = canvas.width * (START_CENTER_X / DESIGN_WIDTH);
-				const baseY = canvas.height * (START_CENTER_Y / DESIGN_HEIGHT);
-				const halfW = canvas.width * ((START_WIDTH / DESIGN_WIDTH) * 0.5);
-				const halfH = canvas.height * ((START_HEIGHT / DESIGN_HEIGHT) * 0.5);
-				const offsets = [
-					[-0.22, 0.0],
-					[0.0, 0.0],
-					[0.22, 0.0],
-					[0.0, -0.18],
-					[0.0, 0.18]
-				];
-
-				let warmHits = 0;
-				for (const [ox, oy] of offsets) {
-					const x = Math.max(0, Math.min(canvas.width - 1, Math.floor(baseX + halfW * ox)));
-					const y = Math.max(0, Math.min(canvas.height - 1, Math.floor(baseY + halfH * oy)));
-					const p = probeCtx.getImageData(x, y, 1, 1).data;
-					if (isWarmStartPixel(p)) {
-						warmHits += 1;
-					}
-				}
-
-				// Require multiple warm hits, but not too strict to avoid missing real Home.
-				const active = warmHits >= 3;
-				console.log("[MetaNova] Home detection =", active, "warmHits=", warmHits);
-				return active;
-			} catch (err) {
-				console.log("[MetaNova] isHomeVisualActive=false (exception)", err);
-				return false;
-			}
-		}
-
-		function isInsideRect(event, centerX, centerY, width, height) {
-			const point = getEventPoint(event);
-			if (!point) {
-				console.log("[MetaNova] isInsideRect=false (no event point)");
-				return false;
-			}
-
-			const canvas = getCanvas();
-			if (!canvas) {
-				console.log("[MetaNova] isInsideRect=false (no canvas)");
-				return false;
-			}
-
-			const rect = canvas.getBoundingClientRect();
-			const scaleX = rect.width / DESIGN_WIDTH;
-			const scaleY = rect.height / DESIGN_HEIGHT;
-			const cx = rect.left + centerX * scaleX;
-			const cy = rect.top + centerY * scaleY;
-			const halfW = (width * scaleX) / 2;
-			const halfH = (height * scaleY) / 2;
-
-			return point.clientX >= cx - halfW && point.clientX <= cx + halfW && point.clientY >= cy - halfH && point.clientY <= cy + halfH;
+			console.log("[MetaNova] hidden");
 		}
 
 		function getEventPoint(event) {
 			if (event && typeof event.clientX === "number" && typeof event.clientY === "number") {
-				return { clientX: event.clientX, clientY: event.clientY };
+				return { x: event.clientX, y: event.clientY };
 			}
 
 			if (event && event.touches && event.touches.length > 0) {
-				return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
+				return { x: event.touches[0].clientX, y: event.touches[0].clientY };
 			}
 
 			if (event && event.changedTouches && event.changedTouches.length > 0) {
-				return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
+				return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
 			}
 
-			console.log("[MetaNova] getEventPoint() returned null");
 			return null;
 		}
 
-		function layoutLogo(img) {
-			const canvas = getCanvas();
-			const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-			if (rect.width <= 0 || rect.height <= 0) {
-				console.log("[MetaNova] layoutLogo() return (invalid rect)", rect);
-				return;
+		function isPointInRect(point, rect) {
+			if (!point) {
+				return false;
 			}
 
-			const scaleX = rect.width / DESIGN_WIDTH;
-			const scaleY = rect.height / DESIGN_HEIGHT;
-			img.style.top = (rect.top + LOGO_TOP_DESIGN_Y * scaleY - 70).toFixed(2) + "px";
-			img.style.width = (LOGO_WIDTH_DESIGN * scaleX).toFixed(2) + "px";
+			const vw = window.innerWidth;
+			const vh = window.innerHeight;
+			const cx = vw * rect.cx;
+			const cy = vh * rect.cy;
+			const halfW = (vw * rect.w) / 2;
+			const halfH = (vh * rect.h) / 2;
+
+			return point.x >= cx - halfW && point.x <= cx + halfW && point.y >= cy - halfH && point.y <= cy + halfH;
 		}
 
-		function showLogo() {
-			console.log("[MetaNova] showLogo() called");
-			if (gameplayActive) {
-				console.log("[MetaNova] blocked because gameplayActive =", gameplayActive);
-				console.log("[MetaNova] Logo show blocked because gameplay is active");
-				return;
+		function shouldDebounceActivation() {
+			const now = Date.now();
+			if (now - metanovaLastActivationMs < 500) {
+				return true;
 			}
 
-			const img = getOrCreateLogo();
-			layoutLogo(img);
-			img.style.display = "block";
-			console.log("[MetaNova] showing logo");
-			if (!isShown) {
-				isShown = true;
-				console.log("[MetaNova] Home detected - logo shown");
-			}
-		}
-
-		function hideLogo() {
-			console.log("[MetaNova] hiding logo");
-			const img = document.getElementById("metanova-home-logo");
-			if (img) {
-				img.style.display = "none";
-			}
-			if (isShown) {
-				isShown = false;
-				console.log("[MetaNova] Gameplay detected - logo hidden");
-			}
-		}
-
-		function enableGameplayLock(logMessage) {
-			if (gameplayActive) {
-				console.log("[MetaNova] enableGameplayLock() return (already active)");
-				return;
-			}
-
-			gameplayActive = true;
-			homeReturnPending = false;
-			homeConfirmTicks = 0;
-			document.body.classList.add("metanova-gameplay-active");
-			console.log(logMessage);
-			hideLogo();
-		}
-
-		function releaseGameplayLock() {
-			if (!gameplayActive) {
-				console.log("[MetaNova] releaseGameplayLock() return (not active)");
-				return;
-			}
-
-			gameplayActive = false;
-			homeReturnPending = false;
-			homeConfirmTicks = 0;
-			document.body.classList.remove("metanova-gameplay-active");
-			console.log("[MetaNova] Explicit Home return detected - gameplay lock released");
-		}
-
-		function isStartPressed(event) {
-			return isInsideRect(event, START_CENTER_X, START_CENTER_Y, START_WIDTH, START_HEIGHT);
-		}
-
-		function isExplicitHomePressed(event) {
-			return isInsideRect(event, OPTION_HOME_CENTER_X, OPTION_HOME_CENTER_Y, OPTION_HOME_WIDTH, OPTION_HOME_HEIGHT)
-				|| isInsideRect(event, GAMEOVER_HOME_CENTER_X, GAMEOVER_HOME_CENTER_Y, GAMEOVER_HOME_WIDTH, GAMEOVER_HOME_HEIGHT);
+			metanovaLastActivationMs = now;
+			return false;
 		}
 
 		function handleMetaNovaInput(event) {
-			if (!gameplayActive && isStartPressed(event)) {
-				enableGameplayLock("[MetaNova] START GAME detected - gameplay lock enabled");
+			const point = getEventPoint(event);
+			if (!point || shouldDebounceActivation()) {
 				return;
 			}
 
-			if (gameplayActive && isExplicitHomePressed(event)) {
-				homeReturnPending = true;
-				homeConfirmTicks = 0;
+			if (!metanovaGameStarted && isPointInRect(point, START_RECT)) {
+				metanovaGameStarted = true;
+				hideMetaNovaLogo();
 				return;
 			}
 
-			if (isShown && isStartPressed(event)) {
-				hideLogo();
+			if (metanovaGameStarted && (isPointInRect(point, OPTION_HOME_RECT) || isPointInRect(point, GAMEOVER_HOME_RECT))) {
+				metanovaGameStarted = false;
+				document.body.classList.remove("metanova-gameplay-active");
+
+				setTimeout(showMetaNovaLogo, 500);
 			}
 		}
 
-		document.addEventListener("pointerdown", handleMetaNovaInput, true);
-		document.addEventListener("touchstart", handleMetaNovaInput, { capture: true, passive: true });
-
-		window.addEventListener("resize", function () {
-			const img = document.getElementById("metanova-home-logo");
-			if (img && isShown) {
-				layoutLogo(img);
-			}
-		});
-
-		window.setInterval(function () {
-			const homeNow = isHomeVisualActive();
-			const sceneReady = isSceneReadyForLogo();
-			console.log("[MetaNova] interval tick", {
-				homeNow: homeNow,
-				sceneReady: sceneReady,
-				gameplayActive: gameplayActive,
-				homeReturnPending: homeReturnPending,
-				homeConfirmTicks: homeConfirmTicks
-			});
-
-			if (gameplayActive) {
-				hideLogo();
-				if (homeReturnPending) {
-					if (homeNow) {
-						homeConfirmTicks += 1;
-						if (homeConfirmTicks >= HOME_UNLOCK_TICKS) {
-							releaseGameplayLock();
-							showLogo();
-						}
-					} else {
-						homeConfirmTicks = 0;
-					}
-				}
+		function setupMetaNovaDebugPanel() {
+			const params = new URLSearchParams(window.location.search);
+			if (params.get("metanovadebug") !== "1") {
 				return;
 			}
 
-			if (homeNow || sceneReady) {
-				showLogo();
-			} else {
-				hideLogo();
+			const panel = document.createElement("div");
+			panel.id = "metanova-debug-panel";
+			document.body.appendChild(panel);
+
+			window.setInterval(function () {
+				const logo = getMetaNovaLogo();
+				const style = logo ? getComputedStyle(logo) : null;
+				panel.textContent = [
+					"[MetaNova Debug]",
+					"logo element exists: " + (!!logo),
+					"image complete: " + (logo ? logo.complete : false),
+					"naturalWidth: " + (logo ? logo.naturalWidth : 0),
+					"naturalHeight: " + (logo ? logo.naturalHeight : 0),
+					"image src: " + (logo ? (logo.currentSrc || logo.src) : ""),
+					"gameStarted: " + metanovaGameStarted,
+					"display: " + (style ? style.display : ""),
+					"visibility: " + (style ? style.visibility : ""),
+					"opacity: " + (style ? style.opacity : ""),
+					"z-index: " + (style ? style.zIndex : ""),
+					"body gameplay class: " + document.body.classList.contains("metanova-gameplay-active")
+				].join("\n");
+			}, 300);
+		}
+
+		const logo = getMetaNovaLogo();
+		if (!logo) {
+			return;
+		}
+
+		logo.addEventListener("load", () => {
+			console.log("[MetaNova] image loaded", logo.currentSrc || logo.src);
+
+			if (!metanovaGameStarted) {
+				setTimeout(showMetaNovaLogo, 1200);
 			}
-		}, 150);
+		});
+
+		logo.addEventListener("error", () => {
+			console.error("[MetaNova] image failed", logo.currentSrc || logo.src);
+		});
+
+		if (logo.complete && logo.naturalWidth > 0) {
+			setTimeout(showMetaNovaLogo, 1200);
+		}
+
+		window.addEventListener("load", () => {
+			setTimeout(() => {
+				if (!metanovaGameStarted) {
+					showMetaNovaLogo();
+				}
+			}, 2500);
+		});
+
+		document.addEventListener("pointerdown", handleMetaNovaInput, true);
+		document.addEventListener("touchstart", handleMetaNovaInput, { capture: true, passive: true });
+		document.addEventListener("click", handleMetaNovaInput, true);
+
+		hideMetaNovaLogo();
+		setupMetaNovaDebugPanel();
 	});
 	</script>
 
