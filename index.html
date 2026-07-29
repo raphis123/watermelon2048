@@ -12,7 +12,7 @@
 	<link rel="apple-touch-icon" sizes="256x256" href="icons/icon-256.png">
 	<link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
 	<link rel="icon" type="image/png" href="icons/icon-512.png">
-	<link rel="preload" as="image" href="images/metanova_logo.webp">
+	<link rel="preload" as="image" href="./images/metanova_logo.webp">
 
 <link rel="stylesheet" href="style.css">
 
@@ -47,7 +47,7 @@ if (location.protocol.substr(0, 4) === "file")
 	<script src="scripts/register-sw.js" type="module"></script>
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
-		const logoUrl = new URL("images/metanova_logo.webp", document.baseURI).href;
+		const logoUrl = new URL("./images/metanova_logo.webp", document.baseURI).href;
 		const DESIGN_WIDTH = 1080;
 		const DESIGN_HEIGHT = 1920;
 		const START_CENTER_X = 540;
@@ -116,14 +116,15 @@ if (location.protocol.substr(0, 4) === "file")
 			img.style.opacity = "1";
 			img.style.height = "auto";
 			img.style.maxWidth = "none";
-			img.onload = function () {
+			const logo = img;
+			logo.addEventListener("load", () => {
 				logoLoadStatus = "loaded";
-				console.log("[MetaNova] img.onload fired", img.currentSrc || img.src);
-			};
-			img.onerror = function () {
+				console.log("[MetaNova] logo loaded:", logo.src);
+			});
+			logo.addEventListener("error", () => {
 				logoLoadStatus = "error";
-				console.log("[MetaNova] img.onerror fired", img.currentSrc || img.src);
-			};
+				console.error("[MetaNova] logo failed:", logo.src);
+			});
 			console.log("[MetaNova] creating logo element with src", img.src);
 			document.body.appendChild(img);
 			return img;
@@ -360,7 +361,6 @@ if (location.protocol.substr(0, 4) === "file")
 		}
 
 		document.addEventListener("pointerdown", handleMetaNovaInput, true);
-		document.addEventListener("mousedown", handleMetaNovaInput, true);
 		document.addEventListener("touchstart", handleMetaNovaInput, { capture: true, passive: true });
 
 		window.addEventListener("resize", function () {
