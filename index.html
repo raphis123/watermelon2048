@@ -20,7 +20,7 @@
 #metanova-home-logo {
 	position: fixed;
 	left: 50%;
-	top: 3.5%;
+	top: 68%;
 	transform: translateX(-50%);
 	width: min(24vw, 260px);
 	height: auto;
@@ -156,12 +156,17 @@ if (location.protocol.substr(0, 4) === "file")
 				return false;
 			}
 
-			const vw = window.innerWidth;
-			const vh = window.innerHeight;
-			const cx = vw * rect.cx;
-			const cy = vh * rect.cy;
-			const halfW = (vw * rect.w) / 2;
-			const halfH = (vh * rect.h) / 2;
+			const canvas = window.c3canvas || document.querySelector("canvas");
+			const bounds = canvas ? canvas.getBoundingClientRect() : {
+				left: 0,
+				top: 0,
+				width: window.innerWidth,
+				height: window.innerHeight
+			};
+			const cx = bounds.left + (bounds.width * rect.cx);
+			const cy = bounds.top + (bounds.height * rect.cy);
+			const halfW = (bounds.width * rect.w) / 2;
+			const halfH = (bounds.height * rect.h) / 2;
 
 			return point.x >= cx - halfW && point.x <= cx + halfW && point.y >= cy - halfH && point.y <= cy + halfH;
 		}
