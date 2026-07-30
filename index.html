@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <title>Watermelon Fruit 2048</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 
 <meta name="generator" content="Scirra Construct">
 	<meta name="description" content="a">
@@ -93,6 +96,14 @@ if (location.protocol.substr(0, 4) === "file")
 	<script src="scripts/register-sw.js" type="module"></script>
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
+		if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+			navigator.serviceWorker.getRegistrations().then((registrations) => {
+				registrations.forEach((registration) => registration.update());
+			}).catch((err) => {
+				console.warn("[MetaNova] service worker update check failed", err);
+			});
+		}
+
 		const START_RECT = { cx: 0.5, cy: 1046 / 1920, w: 710 / 1080, h: 200 / 1920 };
 		const OPTION_HOME_RECT = { cx: 0.5, cy: 1038 / 1920, w: 460 / 1080, h: 162 / 1920 };
 		const GAMEOVER_HOME_RECT = { cx: 415 / 1080, cy: 1275 / 1920, w: 210 / 1080, h: 215 / 1920 };
